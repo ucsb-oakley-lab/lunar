@@ -1,0 +1,14 @@
+#Identify glare in each contour dataset
+./glare_id.py contours_22Jul2024.tab contours_22Jul2024_glare.tab -m 4000
+./glare_id.py contours_23Jul2024.tab contours_23Jul2024_glare.tab -m 4000
+./glare_id.py contours_24Jul2024.tab contours_24Jul2024_glare.tab -m 4000
+./glare_id.py contours_25Jul2024.tab contours_25Jul2024_glare.tab -m 4000
+
+echo "Check glare id with glare_plot.py before running label_tanx.py"
+
+#label which tank each contour is in 
+#./label_tanx.py -f contours_22Jul2024_glare.tab -t 185 655 1210 1705 2062 2534 3096 3635
+#./label_tanx.py -f contours_23Jul2024_glare.tab -t 139 596 1162 1674 2020 2465 3052 3589
+#./label_tanx.py -f contours_24Jul2024_glare.tab -t 164 627 1198 1705 2040 2493 3068 3635
+#./label_tanx.py -f contours_25Jul2024_glare.tab -t 164 627 1158 1674 2040 2493 3046 3571
+

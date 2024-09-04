@@ -1,0 +1,13 @@
+#./visualize_tanx.py -v ~/labdata/users/McKinley/FRD_Panama2024/FRD_Panama22Jul2024/out_00.mp4  -f 500 -t 185 655 1210 1705 2062 2525 3096 3635
+./find_contours_parallel.py -v '/home/local/ADS/oakley/labdata/users/McKinley/FRD_Panama2024/FRD_Panama22Jul2024/out*.mp4' -f 22Jul2024 -b 200 -m 15 -x 1000 -bt 100 & 
+
+
+#./visualize_tanx.py -v ~/labdata/users/McKinley/FRD_Panama2024/FRD_Panama23Jul2024/out_00.mp4  -f 500 -t 139 596 1162 1674 2020 2465 3052 3589
+./find_contours_parallel.py -v '/home/local/ADS/oakley/labdata/users/McKinley/FRD_Panama2024/FRD_Panama23Jul2024/out*.mp4' -f 23Jul2024 -b 200 -m 15 -x 1000 -bt 100 &
+
+
+#./visualize_tanx.py -v ~/labdata/users/McKinley/FRD_Panama2024/FRD_Panama24Jul2024/out_00.mp4  -f 500 -t 164 627 1198 1705 2040 2493 3068 3635
+./find_contours_parallel.py -v '/home/local/ADS/oakley/labdata/users/McKinley/FRD_Panama2024/FRD_Panama24Jul2024/out*.mp4' -f 24Jul2024 -b 200 -m 15 -x 1000 -bt 100 &
+
+#./visualize_tanx.py -v ~/labdata/users/McKinley/FRD_Panama2024/FRD_Panama25Jul2024/out_00.mp4  -f 500 -t 164 627 1158 1674 2040 2493 3046 3571
+./find_contours_parallel.py -v '/home/local/ADS/oakley/labdata/users/McKinley/FRD_Panama2024/FRD_Panama25Jul2024/out*.mp4' -f 25Jul2024 -b 200 -m 15 -x 1000 -bt 100 
