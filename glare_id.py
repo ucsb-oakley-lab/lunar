@@ -52,7 +52,7 @@ if __name__ == "__main__":
     parser.add_argument('output_file', type=str, help='Path to the output file.')
     parser.add_argument('--min_cluster_size', type=int, default=10000, help='Minimum number of elements in a cluster to be considered glare.')
     parser.add_argument('--eps', type=float, default=0.3, help='Epsilon parameter for DBSCAN.')
-    parser.add_argument('--min_samples', type=int, default=50, help='Minimum number of samples for a cluster in DBSCAN.')
+    parser.add_argument('-m', '--min_samples', type=int, default=50, help='Minimum number of samples for a cluster in DBSCAN.')
     args = parser.parse_args()
 
     # Process the file

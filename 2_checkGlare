@@ -1,8 +1,8 @@
 #Identify glare in each contour dataset
-./glare_id.py contours_22Jul2024.tab contours_22Jul2024_glare.tab -m 4000
-./glare_id.py contours_23Jul2024.tab contours_23Jul2024_glare.tab -m 4000
-./glare_id.py contours_24Jul2024.tab contours_24Jul2024_glare.tab -m 4000
-./glare_id.py contours_25Jul2024.tab contours_25Jul2024_glare.tab -m 4000
+./glare_id.py ../data/contours_22Jul2024.tab ../data/contours_22Jul2024_glare.tab -m 4000 &
+./glare_id.py ../data/contours_23Jul2024.tab ../data/contours_23Jul2024_glare.tab -m 4000 &
+./glare_id.py ../data/contours_24Jul2024.tab ../data/contours_24Jul2024_glare.tab -m 4000 &
+./glare_id.py ../data/contours_25Jul2024.tab ../data/contours_25Jul2024_glare.tab -m 4000
 
 echo "Check glare id with glare_plot.py before running label_tanx.py"
 
