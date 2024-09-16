@@ -28,7 +28,7 @@ def plot_glare_contours(input_file, color_by_cluster=False):
             cluster_negative_one['frame'],
             cluster_negative_one['cX'],
             color='red',
-            alpha=0.6,
+            s=1,  # Reduced point size
             label="Cluster -1"
         )
 
@@ -36,7 +36,7 @@ def plot_glare_contours(input_file, color_by_cluster=False):
             cluster_other['frame'],
             cluster_other['cX'],
             color='blue',
-            alpha=0.6,
+            s=1,  # Reduced point size
             label="Other Clusters"
         )
 
@@ -53,7 +53,7 @@ def plot_glare_contours(input_file, color_by_cluster=False):
                 glare_data['frame'],
                 glare_data['cX'],
                 color='red' if glare_value == 'yes' else 'blue',
-                alpha=0.6,
+                s=1,  # Reduced point size
                 label=f"Glare: {glare_value}"
             )
         plt.legend(loc='upper right', title="Glare", fontsize='small', markerscale=1.2)
