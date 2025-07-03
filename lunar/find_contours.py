@@ -1,20 +1,18 @@
-# lunar/find_contours.py
-
 import cv2
 import numpy as np
 import concurrent.futures
 import gc
 import glob
+from tqdm.auto import tqdm
 
 def adjust_clip(image, black=0):
-    # Adjusts pixel values: sets all pixel values below `black` to 0
     table = np.concatenate((
         np.zeros(black, dtype="uint8"),
         np.arange(black, 256, dtype="uint8")
     ))
     return cv2.LUT(image, table)
 
-def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video_file):
+def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video_file, maxy=None):
     clipped = adjust_clip(frame, black=black)
     imgray = cv2.cvtColor(clipped, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(imgray, black, 255, cv2.THRESH_TOZERO)
@@ -30,6 +28,9 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
                 cY = int(M["m01"] / M["m00"])
                 cY_flipped = frame_height - cY
 
+                if maxy is not None and cY_flipped > maxy:
+                    continue  # skip contours too high (above maxy in flipped coordinates)
+
                 mask = np.zeros(imgray.shape, np.uint8)
                 cv2.drawContours(mask, [c], 0, 255, -1)
                 min_val, max_val, _, _ = cv2.minMaxLoc(imgray, mask=mask)
@@ -38,15 +39,16 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
                 results.append((frametext, cX, cY_flipped, area, min_val, max_val, mean_val[0], video_file))
     return results
 
-def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0, brightnessThreshold=200, threads=2, outfile='output.tab'):
+def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
+                   brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
     cv2.setNumThreads(threads)
     writefile = open('contours_' + outfile, 'w')
     writefile.write("frame\tcX\tcY\tarea\tminI\tmaxI\tmeanI\tvideo\n")
 
-    all_results = []  # List to keep results in memory
+    all_results = []
     cumulative_frame = 0
-    
-    for video_file in video_files:
+
+    for video_file in tqdm(video_files, desc="Processing videos"):
         cap = cv2.VideoCapture(video_file)
         if not cap.isOpened():
             continue
@@ -58,61 +60,101 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0, brightne
 
         frame_height = frame.shape[0]
         local_frame_number = 0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         max_tasks = threads * 2
-        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
-            future_to_frame = {}
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
+        with tqdm(total=total_frames, desc=f"{video_file}", leave=False) as frame_pbar:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                future_to_frame = {}
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-                average_brightness = cv2.mean(frame)[0]
-                if average_brightness > brightnessThreshold:
+                    average_brightness = cv2.mean(frame)[0]
                     local_frame_number += 1
                     cumulative_frame += 1
-                    continue
+                    frame_pbar.update(1)
 
-                local_frame_number += 1
-                cumulative_frame += 1
+                    if average_brightness > brightnessThreshold:
+                        continue
 
-                if len(future_to_frame) >= max_tasks:
-                    done, _ = concurrent.futures.wait(future_to_frame, return_when=concurrent.futures.FIRST_COMPLETED)
-                    for future in done:
-                        frame_id = future_to_frame[future]
-                        try:
-                            results = future.result()
-                            all_results.extend(results)  # Add results to in-memory list
-                            for result in results:
-                                writefile.write("\t".join(map(str, result)) + "\n")
-                        except Exception as exc:
-                            print(f"Frame {frame_id} generated an exception: {exc}")
-                        del future_to_frame[future]
+                    if len(future_to_frame) >= max_tasks:
+                        done, _ = concurrent.futures.wait(future_to_frame, return_when=concurrent.futures.FIRST_COMPLETED)
+                        for future in done:
+                            frame_id = future_to_frame[future]
+                            try:
+                                results = future.result()
+                                all_results.extend(results)
+                                for result in results:
+                                    writefile.write("\t".join(map(str, result)) + "\n")
+                            except Exception as exc:
+                                print(f"Frame {frame_id} generated an exception: {exc}")
+                            del future_to_frame[future]
 
-                future = executor.submit(process_frame, cumulative_frame, frame, frame_height, black, minArea, maxArea, video_file)
-                future_to_frame[future] = cumulative_frame
-                del frame
-                gc.collect()
+                    future = executor.submit(
+                        process_frame, cumulative_frame, frame, frame_height,
+                        black, minArea, maxArea, video_file, maxy
+                    )
+                    future_to_frame[future] = cumulative_frame
+                    del frame
+                    gc.collect()
 
-            for future in concurrent.futures.as_completed(future_to_frame):
-                frame_id = future_to_frame[future]
-                try:
-                    results = future.result()
-                    all_results.extend(results)
-                    for result in results:
-                        writefile.write("\t".join(map(str, result)) + "\n")
-                except Exception as exc:
-                    print(f"Frame {frame_id} generated an exception: {exc}")
+                for future in concurrent.futures.as_completed(future_to_frame):
+                    frame_id = future_to_frame[future]
+                    try:
+                        results = future.result()
+                        all_results.extend(results)
+                        for result in results:
+                            writefile.write("\t".join(map(str, result)) + "\n")
+                    except Exception as exc:
+                        print(f"Frame {frame_id} generated an exception: {exc}")
 
         cap.release()
 
     writefile.close()
-    return all_results  # Return results to use immediately
+    return all_results
 
-def find_contours_from_videos(video_pattern, black=110, minArea=1.5, maxArea=1000.0, brightnessThreshold=200, threads=2, outfile='output.tab'):
+def find_contours_from_videos(video_pattern, black=110, minArea=1.5, maxArea=1000.0,
+                              brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
     video_files = sorted(glob.glob(video_pattern))
     if not video_files:
         print(f"No videos found matching pattern: {video_pattern}")
         return
-    process_videos(video_files, black, minArea, maxArea, brightnessThreshold, threads, outfile)
+    return process_videos(video_files, black, minArea, maxArea, brightnessThreshold, threads, outfile, maxy)
+
+# ---------- CLI wrapper ----------
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Find and analyze contours in one or more videos.")
+    parser.add_argument("-p", "--pattern", required=True,
+                        help="Glob pattern for video files, e.g., '*.mp4' or 'data/*.mkv'")
+    parser.add_argument("-b", "--black", type=int, default=110,
+                        help="Threshold below which pixel values are black (default: 110)")
+    parser.add_argument("--minarea", type=float, default=1.5,
+                        help="Minimum contour area to keep (default: 1.5)")
+    parser.add_argument("--maxarea", type=float, default=1000.0,
+                        help="Maximum contour area to keep (default: 1000.0)")
+    parser.add_argument("--brightness", type=float, default=200,
+                        help="Frame mean brightness above which to skip frame (default: 200)")
+    parser.add_argument("--maxy", type=int, default=None,
+                        help="Maximum cY value to keep in flipped coordinate system (exclude timestamps etc.)")
+    parser.add_argument("-t", "--threads", type=int, default=2,
+                        help="Number of threads for parallel processing (default: 2)")
+    parser.add_argument("-o", "--outfile", default="output.tab",
+                        help="Output filename (default: output.tab)")
+
+    args = parser.parse_args()
+
+    find_contours_from_videos(
+        video_pattern=args.pattern,
+        black=args.black,
+        minArea=args.minarea,
+        maxArea=args.maxarea,
+        brightnessThreshold=args.brightness,
+        threads=args.threads,
+        outfile=args.outfile,
+        maxy=args.maxy
+    )
 

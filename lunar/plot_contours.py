@@ -56,3 +56,26 @@ def plot_contours(file_path, glare=False, zoomx=None, zoomy=None):
         plt.grid(True)
         plt.show()
 
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Plot frame vs. cX from a contour data file.")
+    parser.add_argument("-f", "--file", required=True, help="Path to tab-delimited contour file")
+    parser.add_argument("-g", "--glare", action="store_true", help="Color points based on 'glare' column if present")
+    parser.add_argument("--zoomx", nargs=2, type=int, metavar=("XMIN", "XMAX"),
+                        help="Zoom x-axis range (e.g., --zoomx 1000 2000)")
+    parser.add_argument("--zoomy", nargs=2, type=int, metavar=("YMIN", "YMAX"),
+                        help="Zoom y-axis range (e.g., --zoomy 300 400)")
+
+    args = parser.parse_args()
+
+    zoomx_tuple = tuple(args.zoomx) if args.zoomx else None
+    zoomy_tuple = tuple(args.zoomy) if args.zoomy else None
+
+    plot_contours(
+        file_path=args.file,
+        glare=args.glare,
+        zoomx=zoomx_tuple,
+        zoomy=zoomy_tuple
+    )
+
