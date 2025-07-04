@@ -3,7 +3,8 @@ import numpy as np
 import concurrent.futures
 import gc
 import glob
-from tqdm.auto import tqdm
+import sys
+from tqdm import tqdm  # works in CLI and Jupyter with proper logic
 
 def adjust_clip(image, black=0):
     table = np.concatenate((
@@ -29,7 +30,7 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
                 cY_flipped = frame_height - cY
 
                 if maxy is not None and cY_flipped > maxy:
-                    continue  # skip contours too high (above maxy in flipped coordinates)
+                    continue
 
                 mask = np.zeros(imgray.shape, np.uint8)
                 cv2.drawContours(mask, [c], 0, 255, -1)
@@ -40,7 +41,8 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
     return results
 
 def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
-                   brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
+                   brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None,
+                   start_time=None, end_time=None):
     cv2.setNumThreads(threads)
     writefile = open('contours_' + outfile, 'w')
     writefile.write("frame\tcX\tcY\tarea\tminI\tmaxI\tmeanI\tvideo\n")
@@ -48,10 +50,19 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
     all_results = []
     cumulative_frame = 0
 
-    for video_file in tqdm(video_files, desc="Processing videos"):
+    for video_file in tqdm(video_files, desc="Processing videos", leave=True):
         cap = cv2.VideoCapture(video_file)
         if not cap.isOpened():
             continue
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        start_frame = int(start_time * fps) if start_time is not None else 0
+        end_frame = int(end_time * fps) if end_time is not None else total_frames
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        cumulative_frame += start_frame
 
         ret, frame = cap.read()
         if not ret:
@@ -59,24 +70,26 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
             continue
 
         frame_height = frame.shape[0]
-        local_frame_number = 0
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
         max_tasks = threads * 2
-        with tqdm(total=total_frames, desc=f"{video_file}", leave=False) as frame_pbar:
+        with tqdm(total=end_frame - start_frame, desc=video_file, leave=True) as frame_pbar:
             with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
                 future_to_frame = {}
                 while cap.isOpened():
+                    current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+                    if current_frame >= end_frame:
+                        break
+
                     ret, frame = cap.read()
                     if not ret:
                         break
 
                     average_brightness = cv2.mean(frame)[0]
-                    local_frame_number += 1
                     cumulative_frame += 1
-                    frame_pbar.update(1)
 
                     if average_brightness > brightnessThreshold:
+                        frame_pbar.update(1)
                         continue
 
                     if len(future_to_frame) >= max_tasks:
@@ -90,6 +103,8 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                                     writefile.write("\t".join(map(str, result)) + "\n")
                             except Exception as exc:
                                 print(f"Frame {frame_id} generated an exception: {exc}")
+                            finally:
+                                frame_pbar.update(1)
                             del future_to_frame[future]
 
                     future = executor.submit(
@@ -109,6 +124,8 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                             writefile.write("\t".join(map(str, result)) + "\n")
                     except Exception as exc:
                         print(f"Frame {frame_id} generated an exception: {exc}")
+                    finally:
+                        frame_pbar.update(1)
 
         cap.release()
 
@@ -116,16 +133,30 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
     return all_results
 
 def find_contours_from_videos(video_pattern, black=110, minArea=1.5, maxArea=1000.0,
-                              brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
+                              brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None,
+                              start_time=None, end_time=None):
+    import glob
     video_files = sorted(glob.glob(video_pattern))
     if not video_files:
         print(f"No videos found matching pattern: {video_pattern}")
         return
-    return process_videos(video_files, black, minArea, maxArea, brightnessThreshold, threads, outfile, maxy)
+    return process_videos(video_files, black, minArea, maxArea, brightnessThreshold,
+                          threads, outfile, maxy, start_time, end_time)
 
 # ---------- CLI wrapper ----------
-if __name__ == "__main__":
+if __name__ == "__main__" and "ipykernel" not in sys.argv[0]:
     import argparse
+
+    def parse_time(timestr):
+        parts = timestr.split(":")
+        if len(parts) == 1:
+            return float(parts[0])
+        elif len(parts) == 2:
+            minutes = int(parts[0])
+            seconds = float(parts[1])
+            return minutes * 60 + seconds
+        else:
+            raise ValueError(f"Invalid time format: {timestr}")
 
     parser = argparse.ArgumentParser(description="Find and analyze contours in one or more videos.")
     parser.add_argument("-p", "--pattern", required=True,
@@ -144,8 +175,14 @@ if __name__ == "__main__":
                         help="Number of threads for parallel processing (default: 2)")
     parser.add_argument("-o", "--outfile", default="output.tab",
                         help="Output filename (default: output.tab)")
+    parser.add_argument("-s", "--start", type=str, default=None,
+                        help="Start time in seconds or MM:SS (default: None)")
+    parser.add_argument("-e", "--end", type=str, default=None,
+                        help="End time in seconds or MM:SS (default: None)")
 
     args = parser.parse_args()
+    start_sec = parse_time(args.start) if args.start else None
+    end_sec = parse_time(args.end) if args.end else None
 
     find_contours_from_videos(
         video_pattern=args.pattern,
@@ -155,6 +192,8 @@ if __name__ == "__main__":
         brightnessThreshold=args.brightness,
         threads=args.threads,
         outfile=args.outfile,
-        maxy=args.maxy
+        maxy=args.maxy,
+        start_time=start_sec,
+        end_time=end_sec
     )
 
