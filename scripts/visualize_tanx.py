@@ -15,7 +15,7 @@ def extract_frame(video_path, frame_number):
     
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Convert BGR (OpenCV) to RGB (Matplotlib)
 
-def show_frame_with_lines(frame, x_positions, save_path=None, cameras=1):
+def show_frame_with_lines(frame, x_positions, y_positions=None, save_path=None, cameras=1):
     height, width, _ = frame.shape
     plt.imshow(frame)
     if cameras == 2:
@@ -26,20 +26,25 @@ def show_frame_with_lines(frame, x_positions, save_path=None, cameras=1):
     else:
         for x in x_positions:
             plt.axvline(x=x, color='red')
+    # Draw horizontal lines if provided
+    if y_positions:
+        for y in y_positions:
+            plt.axhline(y=y, color='green', linestyle='--')
     if save_path:
         plt.savefig(save_path)
     plt.show()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract and display a frame from a video with vertical lines")
+    parser = argparse.ArgumentParser(description="Extract and display a frame from a video with vertical and horizontal lines")
     parser.add_argument('-v', '--video', type=str, required=True, help="Input video file path")
     parser.add_argument('-f', '--frame', type=int, required=True, help="Frame number to extract")
     parser.add_argument('-t', '--ticks', type=int, nargs='+', required=True, help="X-axis positions for vertical lines")
+    parser.add_argument('-y', '--yticks', type=int, nargs='+', default=None, help="Y-axis positions for horizontal lines")
     parser.add_argument('-o', '--output', type=str, default=None, help="Optional output image file path")
     parser.add_argument('--cameras', type=int, choices=[1,2], default=1, help="Number of cameras in video (1 or 2). Default is 1.")
 
     args = parser.parse_args()
 
     frame = extract_frame(args.video, args.frame)
-    show_frame_with_lines(frame, args.ticks, save_path=args.output, cameras=args.cameras)
+    show_frame_with_lines(frame, args.ticks, y_positions=args.yticks, save_path=args.output, cameras=args.cameras)
 

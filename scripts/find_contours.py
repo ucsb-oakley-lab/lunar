@@ -12,7 +12,12 @@ def adjust_clip(image, black=0):
     ))
     return cv2.LUT(image, table)
 
-def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video_file, maxy=None):
+def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video_file, maxy=None, xlim=None, ylim=None):
+    # Crop frame if xlim/ylim are provided
+    if xlim is not None:
+        frame = frame[:, xlim[0]:xlim[1]]
+    if ylim is not None:
+        frame = frame[ylim[0]:ylim[1], :]
     clipped = adjust_clip(frame, black=black)
     imgray = cv2.cvtColor(clipped, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(imgray, black, 255, cv2.THRESH_TOZERO)
@@ -26,7 +31,11 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
             if M["m00"] != 0:
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
-                cY_flipped = frame_height - cY
+                # Adjust cY_flipped for cropped frames
+                if ylim is not None:
+                    cY_flipped = (ylim[1] - ylim[0]) - cY
+                else:
+                    cY_flipped = frame_height - cY
 
                 if maxy is not None and cY_flipped > maxy:
                     continue  # skip contours too high (above maxy in flipped coordinates)
@@ -40,7 +49,7 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
     return results
 
 def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
-                   brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
+                   brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None, xlim=None, ylim=None):
     cv2.setNumThreads(threads)
     writefile = open('contours_' + outfile, 'w')
     writefile.write("frame\tcX\tcY\tarea\tminI\tmaxI\tmeanI\tvideo\n")
@@ -62,6 +71,7 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
         local_frame_number = 0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+
         max_tasks = threads * 2
         with tqdm(total=total_frames, desc=f"{video_file}", leave=False) as frame_pbar:
             with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
@@ -74,7 +84,12 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                     average_brightness = cv2.mean(frame)[0]
                     local_frame_number += 1
                     cumulative_frame += 1
-                    frame_pbar.update(1)
+                    if local_frame_number % 100 == 0 or local_frame_number == total_frames:
+                        frame_pbar.update(100)
+
+                    # Print progress every 500 frames
+                    if local_frame_number % 500 == 0:
+                        print(f"Processed {local_frame_number} frames in {video_file}")
 
                     if average_brightness > brightnessThreshold:
                         continue
@@ -94,7 +109,7 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
 
                     future = executor.submit(
                         process_frame, cumulative_frame, frame, frame_height,
-                        black, minArea, maxArea, video_file, maxy
+                        black, minArea, maxArea, video_file, maxy, xlim, ylim
                     )
                     future_to_frame[future] = cumulative_frame
                     del frame
@@ -116,12 +131,12 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
     return all_results
 
 def find_contours_from_videos(video_pattern, black=110, minArea=1.5, maxArea=1000.0,
-                              brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None):
+                              brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None, xlim=None, ylim=None):
     video_files = sorted(glob.glob(video_pattern))
     if not video_files:
         print(f"No videos found matching pattern: {video_pattern}")
         return
-    return process_videos(video_files, black, minArea, maxArea, brightnessThreshold, threads, outfile, maxy)
+    return process_videos(video_files, black, minArea, maxArea, brightnessThreshold, threads, outfile, maxy, xlim, ylim)
 
 # ---------- CLI wrapper ----------
 if __name__ == "__main__":
