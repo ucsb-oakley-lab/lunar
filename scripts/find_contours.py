@@ -51,7 +51,7 @@ def process_frame(frametext, frame, frame_height, black, minArea, maxArea, video
 def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                    brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None, xlim=None, ylim=None):
     cv2.setNumThreads(threads)
-    writefile = open('contours_' + outfile, 'w')
+    writefile = open(outfile, 'w')
     writefile.write("frame\tcX\tcY\tarea\tminI\tmaxI\tmeanI\tvideo\n")
 
     all_results = []
