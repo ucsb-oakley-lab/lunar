@@ -54,8 +54,9 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
     writefile = open(outfile, 'w')
     writefile.write("frame\tcX\tcY\tarea\tminI\tmaxI\tmeanI\tvideo\n")
 
-    all_results = []
+    # all_results = []  # Only needed if you want to return all results at the end
     cumulative_frame = 0
+    lines_written = 0  # Track lines written for periodic flush
 
     for video_file in tqdm(video_files, desc="Processing videos"):
         cap = cv2.VideoCapture(video_file)
@@ -87,9 +88,9 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                     if local_frame_number % 100 == 0 or local_frame_number == total_frames:
                         frame_pbar.update(100)
 
-                    # Print progress every 500 frames
-                    if local_frame_number % 500 == 0:
-                        print(f"Processed {local_frame_number} frames in {video_file}")
+                    # Print progress every 500 frames. For extra verbosity, uncomment below
+                    #if local_frame_number % 500 == 0:
+                        #print(f"Processed {local_frame_number} frames in {video_file}")
 
                     if average_brightness > brightnessThreshold:
                         continue
@@ -100,9 +101,11 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                             frame_id = future_to_frame[future]
                             try:
                                 results = future.result()
-                                all_results.extend(results)
                                 for result in results:
                                     writefile.write("\t".join(map(str, result)) + "\n")
+                                    lines_written += 1
+                                    if lines_written % 50 == 0:
+                                        writefile.flush()
                             except Exception as exc:
                                 print(f"Frame {frame_id} generated an exception: {exc}")
                             del future_to_frame[future]
@@ -119,16 +122,18 @@ def process_videos(video_files, black=110, minArea=1.5, maxArea=1000.0,
                     frame_id = future_to_frame[future]
                     try:
                         results = future.result()
-                        all_results.extend(results)
                         for result in results:
                             writefile.write("\t".join(map(str, result)) + "\n")
+                            lines_written += 1
+                            if lines_written % 50 == 0:
+                                writefile.flush()
                     except Exception as exc:
                         print(f"Frame {frame_id} generated an exception: {exc}")
 
         cap.release()
 
     writefile.close()
-    return all_results
+    # return all_results  # Only needed if you want to return all results at the end
 
 def find_contours_from_videos(video_pattern, black=110, minArea=1.5, maxArea=1000.0,
                               brightnessThreshold=200, threads=2, outfile='output.tab', maxy=None, xlim=None, ylim=None):
@@ -159,6 +164,10 @@ if __name__ == "__main__":
                         help="Number of threads for parallel processing (default: 2)")
     parser.add_argument("-o", "--outfile", default="output.tab",
                         help="Output filename (default: output.tab)")
+    parser.add_argument("--xlim", nargs=2, type=int, default=None,
+                        help="Limits for cropping in x direction: start end (e.g., --xlim 30 1540)")
+    parser.add_argument("--ylim", nargs=2, type=int, default=None,
+                        help="Limits for cropping in y direction: start end (e.g., --ylim 30 430)")
 
     args = parser.parse_args()
 
@@ -170,6 +179,8 @@ if __name__ == "__main__":
         brightnessThreshold=args.brightness,
         threads=args.threads,
         outfile=args.outfile,
-        maxy=args.maxy
+        maxy=args.maxy,
+        xlim=args.xlim,
+        ylim=args.ylim
     )
 
